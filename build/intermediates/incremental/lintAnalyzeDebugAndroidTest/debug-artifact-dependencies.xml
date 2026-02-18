@@ -1,0 +1,14 @@
+<dependencies>
+  <compile
+      roots=":@@:::debug">
+    <dependency
+        name=":@@:::debug"
+        simpleName="org.clojure-android:runtime-core"/>
+  </compile>
+  <package
+      roots=":@@:::debug">
+    <dependency
+        name=":@@:::debug"
+        simpleName="org.clojure-android:runtime-core"/>
+  </package>
+</dependencies>

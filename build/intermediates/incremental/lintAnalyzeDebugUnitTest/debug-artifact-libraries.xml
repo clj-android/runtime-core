@@ -1,0 +1,15 @@
+<libraries>
+  <library
+      name=":@@:::debug"
+      jars="/home/claude/.gradle/caches/9.3.1/transforms/99ede575dd186a8a65a8018ea3b59a06/transformed/out/jars/classes.jar:/home/claude/.gradle/caches/9.3.1/transforms/99ede575dd186a8a65a8018ea3b59a06/transformed/out/jars/libs/R.jar"
+      resolved="org.clojure-android:runtime-core:0.1.0-SNAPSHOT"
+      folder="/home/claude/.gradle/caches/9.3.1/transforms/99ede575dd186a8a65a8018ea3b59a06/transformed/out"
+      manifest="AndroidManifest.xml"
+      resFolder="res"
+      assetsFolder="assets"
+      lintJar="lint.jar"
+      publicResources="public.txt"
+      symbolFile="R.txt"
+      externalAnnotations="annotations.zip"
+      proguardRules="proguard.txt"/>
+</libraries>

@@ -1,0 +1,14 @@
+<dependencies>
+  <compile
+      roots="org.clojure:clojure:1.12.0@jar,org.clojure:spec.alpha:0.5.238@jar,org.clojure:core.specs.alpha:0.4.74@jar">
+    <dependency
+        name="org.clojure:clojure:1.12.0@jar"
+        simpleName="org.clojure:clojure"/>
+    <dependency
+        name="org.clojure:spec.alpha:0.5.238@jar"
+        simpleName="org.clojure:spec.alpha"/>
+    <dependency
+        name="org.clojure:core.specs.alpha:0.4.74@jar"
+        simpleName="org.clojure:core.specs.alpha"/>
+  </compile>
+</dependencies>
