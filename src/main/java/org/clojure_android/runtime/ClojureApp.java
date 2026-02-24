@@ -36,10 +36,17 @@ public class ClojureApp extends Application {
     }
 
     /**
-     * Attempts to start the nREPL server in debug builds. In release builds,
-     * {@code AndroidDynamicClassLoader} is stripped by the Gradle plugin, so
-     * the {@code ClassNotFoundException} is caught and auto-start is silently
-     * skipped.
+     * Attempts to start the nREPL server if both the dynamic classloader and
+     * nREPL infrastructure are present.
+     *
+     * <p>Three configurations are possible:
+     * <ul>
+     *   <li>No dynamic classloader (pure release) — skips immediately</li>
+     *   <li>Dynamic classloader present but no nREPL (dynamic compilation only)
+     *       — logs that dynamic compilation is available and skips nREPL</li>
+     *   <li>Both present (debug build, or release with REPL enabled)
+     *       — starts the nREPL server</li>
+     * </ul>
      */
     private void autoStartNrepl() {
         Log.d(TAG, "autoStartNrepl: probing for AndroidDynamicClassLoader");
@@ -48,11 +55,18 @@ public class ClojureApp extends Application {
             Log.d(TAG, "autoStartNrepl: found " + adcl.getName()
                     + " (loader=" + adcl.getClassLoader() + ")");
         } catch (ClassNotFoundException e) {
-            Log.d(TAG, "autoStartNrepl: AndroidDynamicClassLoader not found — release build, skipping");
+            Log.d(TAG, "autoStartNrepl: AndroidDynamicClassLoader not found — skipping");
             return;
         }
 
-        Log.i(TAG, "autoStartNrepl: debug build detected, spawning nREPL starter thread");
+        // Check whether nREPL infrastructure (runtime-repl) is included
+        if (getClass().getClassLoader().getResource("clojure_android/repl/server.clj") == null) {
+            Log.i(TAG, "autoStartNrepl: dynamic compilation available, "
+                    + "but nREPL infrastructure not included — skipping nREPL auto-start");
+            return;
+        }
+
+        Log.i(TAG, "autoStartNrepl: spawning nREPL starter thread");
         Thread starter = new Thread(
             Thread.currentThread().getThreadGroup(),
             () -> {
