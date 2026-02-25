@@ -1,4 +1,4 @@
-package org.clojure_android.runtime;
+package com.goodanser.clj_android.runtime;
 
 import android.app.Activity;
 import android.os.Bundle;

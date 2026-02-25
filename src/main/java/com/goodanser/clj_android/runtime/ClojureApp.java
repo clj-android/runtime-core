@@ -1,4 +1,4 @@
-package org.clojure_android.runtime;
+package com.goodanser.clj_android.runtime;
 
 import android.app.Application;
 import android.util.Log;
@@ -60,7 +60,7 @@ public class ClojureApp extends Application {
         }
 
         // Check whether nREPL infrastructure (runtime-repl) is included
-        if (getClass().getClassLoader().getResource("clojure_android/repl/server.clj") == null) {
+        if (getClass().getClassLoader().getResource("clj_android/repl/server.clj") == null) {
             Log.i(TAG, "autoStartNrepl: dynamic compilation available, "
                     + "but nREPL infrastructure not included — skipping nREPL auto-start");
             return;
@@ -74,16 +74,16 @@ public class ClojureApp extends Application {
                     Log.d(TAG, "nREPL-autostart: resolving clojure.core/require");
                     Object require = clojure.java.api.Clojure.var("clojure.core", "require");
 
-                    Log.d(TAG, "nREPL-autostart: requiring clojure-android.repl.server");
+                    Log.d(TAG, "nREPL-autostart: requiring clj-android.repl.server");
                     long t0 = System.currentTimeMillis();
                     ((clojure.lang.IFn) require).invoke(
-                        clojure.java.api.Clojure.read("clojure-android.repl.server"));
+                        clojure.java.api.Clojure.read("clj-android.repl.server"));
                     long requireMs = System.currentTimeMillis() - t0;
                     Log.d(TAG, "nREPL-autostart: require completed in " + requireMs + "ms");
 
                     Log.d(TAG, "nREPL-autostart: calling (start) on port 7888");
                     Object startServer = clojure.java.api.Clojure.var(
-                        "clojure-android.repl.server", "start");
+                        "clj-android.repl.server", "start");
                     t0 = System.currentTimeMillis();
                     Object server = ((clojure.lang.IFn) startServer).invoke();
                     long startMs = System.currentTimeMillis() - t0;
