@@ -15,8 +15,8 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
     }
 
     publishing {
@@ -40,7 +40,7 @@ afterEvaluate {
     val kotlinPlatformAttr = Attribute.of("org.jetbrains.kotlin.platform.type", Named::class.java)
 
     configurations.configureEach {
-        if (isCanBeConsumed && !isCanBeResolved) {
+        if (isCanBeConsumed && !isCanBeResolved && name != "archives") {
             attributes {
                 attribute(categoryAttr, objects.named("library"))
                 attribute(jvmEnvAttr, objects.named("android"))
