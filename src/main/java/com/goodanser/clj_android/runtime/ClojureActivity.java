@@ -188,7 +188,6 @@ public class ClojureActivity extends Activity {
             try {
                 View view = (View) makeUi.invoke(this);
                 if (view != null) {
-                    view.setFitsSystemWindows(true);
                     setContentView(view);
                 }
             } catch (Exception e) {
@@ -297,7 +296,6 @@ public class ClojureActivity extends Activity {
             try {
                 View view = (View) makeUi.invoke(this);
                 if (view != null) {
-                    view.setFitsSystemWindows(true);
                     setContentView(view);
                     Log.i(TAG, "UI reloaded for " + clojureNamespace);
                 }
