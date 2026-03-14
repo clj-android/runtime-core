@@ -2,8 +2,12 @@ package com.goodanser.clj_android.runtime;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.ContextMenu;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.widget.TextView;
 
@@ -24,17 +28,56 @@ import java.util.concurrent.ConcurrentHashMap;
  * </pre>
  *
  * <p>The Clojure namespace may define any of these functions (all optional):</p>
+ *
+ * <h4>Lifecycle</h4>
  * <ul>
- *   <li>{@code (on-create [activity bundle])} — called from {@code onCreate}</li>
- *   <li>{@code (on-start [activity])}, {@code (on-resume [activity])},
- *       {@code (on-pause [activity])}, {@code (on-stop [activity])},
- *       {@code (on-destroy [activity])}</li>
+ *   <li>{@code (on-create [activity bundle])}</li>
+ *   <li>{@code (on-start [activity])}, {@code (on-restart [activity])},
+ *       {@code (on-resume [activity])}, {@code (on-pause [activity])},
+ *       {@code (on-stop [activity])}, {@code (on-destroy [activity])}</li>
  *   <li>{@code (on-save-instance-state [activity bundle])}</li>
  *   <li>{@code (on-restore-instance-state [activity bundle])}</li>
- *   <li>{@code (on-activity-result [activity request-code result-code intent])}
- *       — called from {@code onActivityResult}</li>
  *   <li>{@code (make-ui [activity])} — returns a {@link View}; used by
  *       {@link #reloadUi()} and as a fallback if {@code on-create} is absent</li>
+ * </ul>
+ *
+ * <h4>Intent &amp; navigation</h4>
+ * <ul>
+ *   <li>{@code (on-activity-result [activity request-code result-code intent])}</li>
+ *   <li>{@code (on-new-intent [activity intent])}</li>
+ *   <li>{@code (on-back-pressed [activity])} — if defined, replaces default
+ *       back behavior; must handle navigation itself</li>
+ *   <li>{@code (on-request-permissions-result [activity request-code permissions grant-results])}</li>
+ * </ul>
+ *
+ * <h4>Menus</h4>
+ * <ul>
+ *   <li>{@code (on-create-options-menu [activity menu])} — return truthy to show menu</li>
+ *   <li>{@code (on-prepare-options-menu [activity menu])} — return truthy to show menu</li>
+ *   <li>{@code (on-options-item-selected [activity item])} — return truthy if consumed</li>
+ *   <li>{@code (on-create-context-menu [activity menu view menu-info])}</li>
+ *   <li>{@code (on-context-item-selected [activity item])} — return truthy if consumed</li>
+ * </ul>
+ *
+ * <h4>Configuration &amp; memory</h4>
+ * <ul>
+ *   <li>{@code (on-configuration-changed [activity config])}</li>
+ *   <li>{@code (on-low-memory [activity])}</li>
+ *   <li>{@code (on-trim-memory [activity level])}</li>
+ * </ul>
+ *
+ * <h4>Window</h4>
+ * <ul>
+ *   <li>{@code (on-window-focus-changed [activity has-focus])}</li>
+ *   <li>{@code (on-attached-to-window [activity])}</li>
+ *   <li>{@code (on-detached-from-window [activity])}</li>
+ * </ul>
+ *
+ * <h4>Multi-window</h4>
+ * <ul>
+ *   <li>{@code (on-multi-window-mode-changed [activity in-multi-window config])}</li>
+ *   <li>{@code (on-picture-in-picture-mode-changed [activity in-pip config])}</li>
+ *   <li>{@code (on-user-leave-hint [activity])}</li>
  * </ul>
  *
  * <p>Override {@link #getClojureNamespace()} to use a custom namespace instead
@@ -203,6 +246,12 @@ public class ClojureActivity extends Activity {
     }
 
     @Override
+    protected void onRestart() {
+        super.onRestart();
+        invokeLifecycle("on-restart");
+    }
+
+    @Override
     protected void onStart() {
         super.onStart();
         invokeLifecycle("on-start");
@@ -275,6 +324,254 @@ public class ClojureActivity extends Activity {
         }
     }
 
+    // ---------------------------------------------------------------
+    // Intent & navigation
+    // ---------------------------------------------------------------
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        if (!namespaceLoaded) return;
+        clojure.lang.IFn fn = lookupFn("on-new-intent");
+        if (fn != null) {
+            try {
+                fn.invoke(this, intent);
+            } catch (Exception e) {
+                Log.e(TAG, "on-new-intent failed", e);
+            }
+        }
+    }
+
+    @SuppressWarnings("deprecation")
+    @Override
+    public void onBackPressed() {
+        if (!namespaceLoaded) {
+            super.onBackPressed();
+            return;
+        }
+        clojure.lang.IFn fn = lookupFn("on-back-pressed");
+        if (fn != null) {
+            try {
+                fn.invoke(this);
+            } catch (Exception e) {
+                Log.e(TAG, "on-back-pressed failed", e);
+                super.onBackPressed();
+            }
+        } else {
+            super.onBackPressed();
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode,
+            String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (!namespaceLoaded) return;
+        clojure.lang.IFn fn = lookupFn("on-request-permissions-result");
+        if (fn != null) {
+            try {
+                fn.invoke(this, requestCode, permissions, grantResults);
+            } catch (Exception e) {
+                Log.e(TAG, "on-request-permissions-result failed", e);
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // Menus
+    // ---------------------------------------------------------------
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        if (namespaceLoaded) {
+            clojure.lang.IFn fn = lookupFn("on-create-options-menu");
+            if (fn != null) {
+                try {
+                    Object result = fn.invoke(this, menu);
+                    return isTruthy(result);
+                } catch (Exception e) {
+                    Log.e(TAG, "on-create-options-menu failed", e);
+                }
+            }
+        }
+        return super.onCreateOptionsMenu(menu);
+    }
+
+    @Override
+    public boolean onPrepareOptionsMenu(Menu menu) {
+        if (namespaceLoaded) {
+            clojure.lang.IFn fn = lookupFn("on-prepare-options-menu");
+            if (fn != null) {
+                try {
+                    Object result = fn.invoke(this, menu);
+                    return isTruthy(result);
+                } catch (Exception e) {
+                    Log.e(TAG, "on-prepare-options-menu failed", e);
+                }
+            }
+        }
+        return super.onPrepareOptionsMenu(menu);
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        if (namespaceLoaded) {
+            clojure.lang.IFn fn = lookupFn("on-options-item-selected");
+            if (fn != null) {
+                try {
+                    Object result = fn.invoke(this, item);
+                    if (isTruthy(result)) return true;
+                } catch (Exception e) {
+                    Log.e(TAG, "on-options-item-selected failed", e);
+                }
+            }
+        }
+        return super.onOptionsItemSelected(item);
+    }
+
+    @Override
+    public void onCreateContextMenu(ContextMenu menu, View v,
+            ContextMenu.ContextMenuInfo menuInfo) {
+        super.onCreateContextMenu(menu, v, menuInfo);
+        if (!namespaceLoaded) return;
+        clojure.lang.IFn fn = lookupFn("on-create-context-menu");
+        if (fn != null) {
+            try {
+                fn.invoke(this, menu, v, menuInfo);
+            } catch (Exception e) {
+                Log.e(TAG, "on-create-context-menu failed", e);
+            }
+        }
+    }
+
+    @Override
+    public boolean onContextItemSelected(MenuItem item) {
+        if (namespaceLoaded) {
+            clojure.lang.IFn fn = lookupFn("on-context-item-selected");
+            if (fn != null) {
+                try {
+                    Object result = fn.invoke(this, item);
+                    if (isTruthy(result)) return true;
+                } catch (Exception e) {
+                    Log.e(TAG, "on-context-item-selected failed", e);
+                }
+            }
+        }
+        return super.onContextItemSelected(item);
+    }
+
+    // ---------------------------------------------------------------
+    // Configuration & memory
+    // ---------------------------------------------------------------
+
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        if (!namespaceLoaded) return;
+        clojure.lang.IFn fn = lookupFn("on-configuration-changed");
+        if (fn != null) {
+            try {
+                fn.invoke(this, newConfig);
+            } catch (Exception e) {
+                Log.e(TAG, "on-configuration-changed failed", e);
+            }
+        }
+    }
+
+    @Override
+    public void onLowMemory() {
+        super.onLowMemory();
+        invokeLifecycle("on-low-memory");
+    }
+
+    @Override
+    public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        if (!namespaceLoaded) return;
+        clojure.lang.IFn fn = lookupFn("on-trim-memory");
+        if (fn != null) {
+            try {
+                fn.invoke(this, level);
+            } catch (Exception e) {
+                Log.e(TAG, "on-trim-memory failed", e);
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // Window
+    // ---------------------------------------------------------------
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (!namespaceLoaded) return;
+        clojure.lang.IFn fn = lookupFn("on-window-focus-changed");
+        if (fn != null) {
+            try {
+                fn.invoke(this, hasFocus);
+            } catch (Exception e) {
+                Log.e(TAG, "on-window-focus-changed failed", e);
+            }
+        }
+    }
+
+    @Override
+    public void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        invokeLifecycle("on-attached-to-window");
+    }
+
+    @Override
+    public void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+        invokeLifecycle("on-detached-from-window");
+    }
+
+    // ---------------------------------------------------------------
+    // Multi-window
+    // ---------------------------------------------------------------
+
+    @Override
+    public void onMultiWindowModeChanged(boolean isInMultiWindowMode,
+            Configuration newConfig) {
+        super.onMultiWindowModeChanged(isInMultiWindowMode, newConfig);
+        if (!namespaceLoaded) return;
+        clojure.lang.IFn fn = lookupFn("on-multi-window-mode-changed");
+        if (fn != null) {
+            try {
+                fn.invoke(this, isInMultiWindowMode, newConfig);
+            } catch (Exception e) {
+                Log.e(TAG, "on-multi-window-mode-changed failed", e);
+            }
+        }
+    }
+
+    @Override
+    public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode,
+            Configuration newConfig) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
+        if (!namespaceLoaded) return;
+        clojure.lang.IFn fn = lookupFn("on-picture-in-picture-mode-changed");
+        if (fn != null) {
+            try {
+                fn.invoke(this, isInPictureInPictureMode, newConfig);
+            } catch (Exception e) {
+                Log.e(TAG, "on-picture-in-picture-mode-changed failed", e);
+            }
+        }
+    }
+
+    @Override
+    protected void onUserLeaveHint() {
+        super.onUserLeaveHint();
+        invokeLifecycle("on-user-leave-hint");
+    }
+
+    // ---------------------------------------------------------------
+    // Helpers
+    // ---------------------------------------------------------------
+
     /**
      * Invokes a single-argument lifecycle function in the Clojure namespace.
      */
@@ -288,6 +585,16 @@ public class ClojureActivity extends Activity {
                 Log.e(TAG, fnName + " failed", e);
             }
         }
+    }
+
+    /**
+     * Interprets a Clojure return value as a boolean using Clojure truthiness:
+     * {@code nil} and {@code false} are falsy, everything else is truthy.
+     */
+    private static boolean isTruthy(Object value) {
+        if (value == null) return false;
+        if (value instanceof Boolean) return (Boolean) value;
+        return true;
     }
 
     // ---------------------------------------------------------------
