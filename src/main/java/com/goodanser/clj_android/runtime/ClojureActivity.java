@@ -1,6 +1,7 @@
 package com.goodanser.clj_android.runtime;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
@@ -30,6 +31,8 @@ import java.util.concurrent.ConcurrentHashMap;
  *       {@code (on-destroy [activity])}</li>
  *   <li>{@code (on-save-instance-state [activity bundle])}</li>
  *   <li>{@code (on-restore-instance-state [activity bundle])}</li>
+ *   <li>{@code (on-activity-result [activity request-code result-code intent])}
+ *       — called from {@code onActivityResult}</li>
  *   <li>{@code (make-ui [activity])} — returns a {@link View}; used by
  *       {@link #reloadUi()} and as a fallback if {@code on-create} is absent</li>
  * </ul>
@@ -254,6 +257,20 @@ public class ClojureActivity extends Activity {
                 fn.invoke(this, savedInstanceState);
             } catch (Exception e) {
                 Log.e(TAG, "on-restore-instance-state failed", e);
+            }
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (!namespaceLoaded) return;
+        clojure.lang.IFn fn = lookupFn("on-activity-result");
+        if (fn != null) {
+            try {
+                fn.invoke(this, requestCode, resultCode, data);
+            } catch (Exception e) {
+                Log.e(TAG, "on-activity-result failed", e);
             }
         }
     }
