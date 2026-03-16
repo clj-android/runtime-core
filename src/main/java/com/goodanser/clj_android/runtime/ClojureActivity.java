@@ -14,6 +14,7 @@ import android.widget.TextView;
 import java.lang.ref.WeakReference;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Base Activity that automatically bridges into a Clojure namespace.
@@ -43,11 +44,17 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <h4>Intent &amp; navigation</h4>
  * <ul>
- *   <li>{@code (on-activity-result [activity request-code result-code intent])}</li>
+ *   <li>{@code (on-activity-result [activity request-code result-code intent])}
+ *       — only called for request codes below {@link #AUTO_REQUEST_CODE_START}
+ *       (i.e. manually chosen codes 0–9999). Callbacks registered via
+ *       {@link #registerResultCallback} are dispatched first and consume
+ *       their request code.</li>
  *   <li>{@code (on-new-intent [activity intent])}</li>
  *   <li>{@code (on-back-pressed [activity])} — if defined, replaces default
  *       back behavior; must handle navigation itself</li>
- *   <li>{@code (on-request-permissions-result [activity request-code permissions grant-results])}</li>
+ *   <li>{@code (on-request-permissions-result [activity request-code permissions grant-results])}
+ *       — only called for manual request codes (0–9999), same as
+ *       {@code on-activity-result}.</li>
  * </ul>
  *
  * <h4>Menus</h4>
@@ -101,6 +108,29 @@ public class ClojureActivity extends Activity {
 
     /** Whether the Clojure namespace was successfully required. */
     private boolean namespaceLoaded = false;
+
+    /**
+     * Auto-incrementing request code counter for registered callbacks.
+     * Starts at 10000, reserving 0–9999 for manual use with
+     * {@code on-activity-result}.
+     */
+    private final AtomicInteger nextRequestCode = new AtomicInteger(10000);
+
+    /**
+     * One-shot callbacks registered via {@link #registerResultCallback}.
+     * Key: request code. Value: two-element array [onResult, onCancel],
+     * each a {@code clojure.lang.IFn} or {@code null}.
+     */
+    private final ConcurrentHashMap<Integer, clojure.lang.IFn[]> resultCallbacks =
+        new ConcurrentHashMap<>();
+
+    /**
+     * One-shot callbacks registered via {@link #registerPermissionCallback}.
+     * Key: request code. Value: {@code clojure.lang.IFn} called with
+     * {@code (callback activity permissions grantResults)}.
+     */
+    private final ConcurrentHashMap<Integer, clojure.lang.IFn> permissionCallbacks =
+        new ConcurrentHashMap<>();
 
     // ---------------------------------------------------------------
     // Namespace resolution
@@ -313,6 +343,23 @@ public class ClojureActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+
+        // Check registered one-shot callbacks first (auto-generated codes)
+        clojure.lang.IFn[] cbs = resultCallbacks.remove(requestCode);
+        if (cbs != null) {
+            try {
+                if (resultCode == RESULT_OK && cbs[0] != null) {
+                    cbs[0].invoke(this, resultCode, data);
+                } else if (resultCode != RESULT_OK && cbs[1] != null) {
+                    cbs[1].invoke(this);
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Registered result callback failed for code " + requestCode, e);
+            }
+            return;
+        }
+
+        // Fall through to namespace delegate for manual request codes
         if (!namespaceLoaded) return;
         clojure.lang.IFn fn = lookupFn("on-activity-result");
         if (fn != null) {
@@ -366,6 +413,19 @@ public class ClojureActivity extends Activity {
     public void onRequestPermissionsResult(int requestCode,
             String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+
+        // Check registered one-shot callbacks first (auto-generated codes)
+        clojure.lang.IFn cb = permissionCallbacks.remove(requestCode);
+        if (cb != null) {
+            try {
+                cb.invoke(this, permissions, grantResults);
+            } catch (Exception e) {
+                Log.e(TAG, "Registered permission callback failed for code " + requestCode, e);
+            }
+            return;
+        }
+
+        // Fall through to namespace delegate for manual request codes
         if (!namespaceLoaded) return;
         clojure.lang.IFn fn = lookupFn("on-request-permissions-result");
         if (fn != null) {
@@ -566,6 +626,51 @@ public class ClojureActivity extends Activity {
     protected void onUserLeaveHint() {
         super.onUserLeaveHint();
         invokeLifecycle("on-user-leave-hint");
+    }
+
+    // ---------------------------------------------------------------
+    // Activity result callbacks
+    // ---------------------------------------------------------------
+
+    /**
+     * The lowest request code reserved for automatic allocation.
+     * Request codes 0–9999 are safe for manual use in Clojure
+     * namespaces via {@code on-activity-result}.
+     */
+    public static final int AUTO_REQUEST_CODE_START = 10000;
+
+    /**
+     * Registers one-shot callbacks for an activity result and returns
+     * the allocated request code. The callbacks are removed after
+     * {@code onActivityResult} fires for this code.
+     *
+     * @param onResult called with {@code (onResult activity resultCode data)}
+     *                 when a result arrives; may be {@code null}
+     * @param onCancel called with {@code (onCancel activity)} when the
+     *                 result code is not {@code RESULT_OK}; may be {@code null}
+     * @return the request code to pass to
+     *         {@link #startActivityForResult(Intent, int)}
+     */
+    public int registerResultCallback(clojure.lang.IFn onResult,
+                                      clojure.lang.IFn onCancel) {
+        int code = nextRequestCode.getAndIncrement();
+        resultCallbacks.put(code, new clojure.lang.IFn[]{ onResult, onCancel });
+        return code;
+    }
+
+    /**
+     * Registers a one-shot callback for a permission request result and
+     * returns the allocated request code.
+     *
+     * @param callback called with
+     *        {@code (callback activity permissions grantResults)}
+     * @return the request code to pass to
+     *         {@link #requestPermissions(String[], int)}
+     */
+    public int registerPermissionCallback(clojure.lang.IFn callback) {
+        int code = nextRequestCode.getAndIncrement();
+        permissionCallbacks.put(code, callback);
+        return code;
     }
 
     // ---------------------------------------------------------------
