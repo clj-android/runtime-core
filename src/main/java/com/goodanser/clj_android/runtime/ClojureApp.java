@@ -32,7 +32,29 @@ public class ClojureApp extends Application {
     public void onCreate() {
         super.onCreate();
         instance = this;
+        setNekoAppInstance();
         autoStartNrepl();
+    }
+
+    /**
+     * Sets {@code neko.App.instance} via reflection so that neko's convenience
+     * functions (which default to {@code App/instance} as context) work even
+     * when the app does not use {@code neko.App} as its Application class.
+     *
+     * <p>Uses reflection to avoid a compile-time dependency on neko — if neko
+     * is not on the classpath, this is a no-op.</p>
+     */
+    private void setNekoAppInstance() {
+        try {
+            Class<?> nekoApp = Class.forName("neko.App");
+            java.lang.reflect.Field instanceField = nekoApp.getField("instance");
+            instanceField.set(null, this);
+            Log.d(TAG, "Set neko.App.instance to " + this);
+        } catch (ClassNotFoundException e) {
+            // neko not on classpath — nothing to do
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to set neko.App.instance: " + e.getMessage());
+        }
     }
 
     /**
