@@ -262,9 +262,13 @@ public class ClojureActivity extends Activity {
         clojure.lang.IFn makeUi = lookupFn("make-ui");
         if (makeUi != null) {
             try {
-                View view = (View) makeUi.invoke(this);
-                if (view != null) {
-                    setContentView(view);
+                Object result = makeUi.invoke(this);
+                if (result instanceof View) {
+                    setContentView((View) result);
+                } else if (result != null) {
+                    String msg = "make-ui returned " + result.getClass().getSimpleName() + ", expected View";
+                    Log.e(TAG, msg);
+                    showError(msg);
                 }
             } catch (Exception e) {
                 Log.e(TAG, "make-ui failed", e);
@@ -723,13 +727,20 @@ public class ClojureActivity extends Activity {
                 return;
             }
             try {
-                View view = (View) makeUi.invoke(this);
-                if (view != null) {
-                    setContentView(view);
+                Object result = makeUi.invoke(this);
+                if (result instanceof View) {
+                    setContentView((View) result);
                     Log.i(TAG, "UI reloaded for " + clojureNamespace);
+                } else if (result != null) {
+                    String msg = "make-ui returned " + result.getClass().getSimpleName() + ", expected View";
+                    Log.e(TAG, msg);
+                    android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_LONG).show();
                 }
             } catch (Exception e) {
                 Log.e(TAG, "reloadUi failed", e);
+                android.widget.Toast.makeText(this,
+                    "reloadUi: " + e.getMessage(),
+                    android.widget.Toast.LENGTH_LONG).show();
             }
         });
     }
